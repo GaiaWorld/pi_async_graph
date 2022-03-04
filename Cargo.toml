@@ -2,11 +2,15 @@
 name = "pi_async_graph"
 version = "0.1.0"
 authors = ["zmythleo <zmythleo@gmail.com>"]
-edition = "2018"
+edition = "2021"
+description = "async graph"
+repository = "https://github.com/GaiaWorld/pi_async_graph.git"
+license = "MIT OR Apache-2.0"
+keywords = ["pi", "async_graph"]
 
 [dependencies]
-pi_graph = {path="../pi_graph"}
-pi_async = { path = "../pi_async" }
+pi_graph = "0.1"
+pi_async = "0.1"
 futures = "0.3"
 flume = "0.10"
 
