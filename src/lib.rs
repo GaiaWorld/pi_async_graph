@@ -9,7 +9,7 @@ use core::hash::Hash;
 use flume::{bounded, Receiver, Sender};
 
 use futures::future::BoxFuture;
-use r#pi_async::rt::{AsyncRuntime, AsyncTaskPool, AsyncTaskPoolExt};
+use r#pi_async::rt::AsyncRuntime;
 use std::io::{Error, ErrorKind, Result};
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -39,8 +39,8 @@ pub async fn async_graph<
     K: Hash + Eq + Sized + Clone + Send + Debug + 'static,
     R: Runnble + 'static,
     G: DirectedGraph<K, R, Node: Send + 'static> + Send + 'static,
-    P: AsyncTaskPoolExt<()> + AsyncTaskPool<(), Pool = P>,
->(rt: AsyncRuntime<(), P>, graph: Arc<G>) -> Result<()> {
+	A: AsyncRuntime<()>,
+>(rt: A, graph: Arc<G>) -> Result<()> {
     // 获得图的to节点的数量
     let mut count = graph.to_len();
     let (producor, consumer) = bounded(count);
@@ -137,9 +137,7 @@ impl<
     > AsyncGraphNode<K, R, G>
 {
     /// 执行指定异步图节点到指定的运行时，并返回任务同步情况下的结束数量
-    pub fn exec<P>(self, rt: AsyncRuntime<(), P>, node: &G::Node) -> Result<usize>
-    where
-        P: AsyncTaskPoolExt<()> + AsyncTaskPool<(), Pool = P>,
+    pub fn exec<A: AsyncRuntime<()>>(self, rt: A, node: &G::Node) -> Result<usize>
     {
         match node.value().is_sync() {
             None => { // 该节点为空节点
@@ -172,9 +170,7 @@ impl<
         Ok(0)
     }
     /// 递归的异步执行
-    async fn exec_async<P>(self, rt: AsyncRuntime<(), P>)
-    where
-        P: AsyncTaskPoolExt<()> + AsyncTaskPool<(), Pool = P>,
+    async fn exec_async<A: AsyncRuntime<()>,>(self, rt: A)
     {
         // 获取同步执行exec_next的结果， 为了不让node引用穿过await，显示声明它的生命周期
         let r = {
@@ -187,9 +183,7 @@ impl<
         let _ = self.producor.into_send_async(r).await;
     }
     /// 递归的同步执行
-    fn exec_next<P>(&self, rt: AsyncRuntime<(), P>, node: &G::Node) -> Result<usize>
-    where
-        P: AsyncTaskPoolExt<()> + AsyncTaskPool<(), Pool = P>,
+    fn exec_next<A: AsyncRuntime<()>,>(&self, rt: A, node: &G::Node) -> Result<usize>
     {
         // 没有后续的节点，则返回结束的数量1
         if node.to_len() == 0 {
@@ -251,10 +245,10 @@ impl<Run: Runner + Send + 'static, Fac:RunFactory<R=Run>> Runnble for ExecNode<R
 
 #[test]
 fn test_graph() {
-    use r#async::rt::multi_thread::MultiTaskRuntimeBuilder;
+    use pi_async::rt::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
     use std::time::Duration;
     use futures::FutureExt;
-    use graph::{NGraphBuilder};
+    use pi_graph::NGraphBuilder;
 
     struct A (usize);
     impl Runner for A {
@@ -282,7 +276,7 @@ fn test_graph() {
         ExecNode::Async(Box::new(f))
     }
 
-    let pool = MultiTaskRuntimeBuilder::default();
+    let pool = MultiTaskRuntimeBuilder::<(), StealableTaskPool<()>>::default();
     let rt0 = pool.build();
     let rt1 = rt0.clone();
     let graph = NGraphBuilder::new()
@@ -309,35 +303,36 @@ fn test_graph() {
     .build().unwrap();
     let ag = Arc::new(graph);
     let _ = rt0.spawn(rt0.alloc(), async move {
-        let _: _ = async_graph(AsyncRuntime::Multi(rt1), ag).await;
+        let _: _ = async_graph(rt1, ag).await;
         println!("ok");
     });
     std::thread::sleep(Duration::from_millis(5000));
 }
 #[test]
 fn test() {
-    use r#async::rt::multi_thread::MultiTaskRuntimeBuilder;
+	use pi_async::rt::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
     use std::time::Duration;
-    let pool = MultiTaskRuntimeBuilder::default();
+
+    let pool = MultiTaskRuntimeBuilder::<(), StealableTaskPool<()>>::default();
     let rt0 = pool.build();
     let rt1 = rt0.clone();
     let _ = rt0.spawn(rt0.alloc(), async move {
         let mut map_reduce = rt1.map_reduce(10);
         let rt2 = rt1.clone();
         let rt3 = rt1.clone();
-        let _ = map_reduce.map(AsyncRuntime::Multi(rt1.clone()), async move {
-            rt1.wait_timeout(300).await;
+        let _ = map_reduce.map(rt1.clone(), async move {
+            rt1.timeout(300).await;
             println!("1111");
             Ok(1)
         });
 
-        let _ = map_reduce.map(AsyncRuntime::Multi(rt2.clone()), async move {
-            rt2.wait_timeout(1000).await;
+        let _ = map_reduce.map(rt2.clone(), async move {
+            rt2.timeout(1000).await;
             println!("2222");
             Ok(2)
         });
-        let _ = map_reduce.map(AsyncRuntime::Multi(rt3.clone()), async move {
-            rt3.wait_timeout(600).await;
+        let _ = map_reduce.map(rt3.clone(), async move {
+            rt3.timeout(600).await;
             println!("3333");
             Ok(3)
         });
