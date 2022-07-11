@@ -43,6 +43,9 @@ pub async fn async_graph<
 >(rt: A, graph: Arc<G>) -> Result<()> {
     // 获得图的to节点的数量
     let mut count = graph.to_len();
+	if count == 0 {
+		return Ok(());
+	}
     let (producor, consumer) = bounded(count);
     for k in graph.from() {
         let an = AsyncGraphNode::new(graph.clone(), k.clone(), producor.clone());
