@@ -1,6 +1,6 @@
 [package]
 name = "pi_async_graph"
-version = "0.2.2"
+version = "0.3.0"
 authors = ["zmythleo <zmythleo@gmail.com>"]
 edition = "2021"
 description = "async graph"
@@ -10,7 +10,7 @@ keywords = ["pi", "async_graph"]
 
 [dependencies]
 pi_graph = "0.1"
-pi_async = "0.4"
+pi_async = "0.5"
 futures = "0.3"
 flume = "0.10"
 

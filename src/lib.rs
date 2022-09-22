@@ -9,7 +9,7 @@ use core::hash::Hash;
 use flume::{bounded, Receiver, Sender};
 
 use futures::future::BoxFuture;
-use r#pi_async::rt::AsyncRuntime;
+use pi_async::prelude::AsyncRuntime;
 use std::io::{Error, ErrorKind, Result};
 use std::marker::PhantomData;
 use std::sync::Arc;
