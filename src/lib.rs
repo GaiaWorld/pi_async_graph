@@ -8,7 +8,7 @@ use core::hash::Hash;
 
 use flume::{bounded, Receiver, Sender};
 
-use futures::future::BoxFuture;
+use pi_futures::BoxFuture;
 use pi_async::prelude::AsyncRuntime;
 use std::io::{Error, ErrorKind, Result};
 use std::marker::PhantomData;
@@ -16,6 +16,7 @@ use std::sync::Arc;
 use std::fmt::Debug;
 
 use pi_graph::{DirectedGraph, DirectedGraphNode};
+use pi_share::ThreadBound;
 
 
 /// 同步执行节点
@@ -25,7 +26,7 @@ pub trait Runner {
 
 /// 可运行节点
 pub trait Runnble {
-    type R: Runner + Send + 'static;
+    type R: Runner + ThreadBound;
     /// 判断是否同步运行， None表示不是可运行节点，true表示同步运行， false表示异步运行
     fn is_sync(&self) -> Option<bool>;
     /// 获得需要执行的同步函数
@@ -36,9 +37,9 @@ pub trait Runnble {
 
 /// 异步图执行
 pub async fn async_graph<
-    K: Hash + Eq + Sized + Clone + Send + Debug + 'static,
-    R: Runnble + 'static,
-    G: DirectedGraph<K, R, Node: Send + 'static> + Send + 'static,
+    K: Hash + Eq + Sized + Clone + Debug + ThreadBound,
+    R: Runnble + ThreadBound,
+    G: DirectedGraph<K, R, Node: ThreadBound> + ThreadBound,
 	A: AsyncRuntime<()>,
 >(rt: A, graph: Arc<G>) -> Result<()> {
     // 获得图的to节点的数量
@@ -102,9 +103,9 @@ impl AsyncGraphResult {
 }
 /// 异步图节点执行
 pub struct AsyncGraphNode<
-    K: Hash + Eq + Sized + Send + Debug + 'static,
+    K: Hash + Eq + Sized + Debug + ThreadBound,
     R: Runnble,
-    G: DirectedGraph<K, R, Node: Send + 'static> + Send + 'static,
+    G: DirectedGraph<K, R, Node: ThreadBound> + ThreadBound,
 > {
     graph: Arc<G>,
     key: K,
@@ -112,9 +113,9 @@ pub struct AsyncGraphNode<
     _k: PhantomData<R>,
 }
 impl<
-    K: Hash + Eq + Sized + Send + Debug + 'static,
+    K: Hash + Eq + Sized + Debug + ThreadBound,
     R: Runnble,
-    G: DirectedGraph<K, R, Node: Send + 'static> + Send + 'static,
+    G: DirectedGraph<K, R, Node: ThreadBound> + ThreadBound,
 > AsyncGraphNode<K, R, G> {
     pub fn new(graph: Arc<G>, key: K, producor: Sender<Result<usize>>) -> Self {
         AsyncGraphNode {
@@ -126,17 +127,17 @@ impl<
     }
 }
 unsafe impl<
-        K: Hash + Eq + Sized + Clone + Send + Debug + 'static,
+        K: Hash + Eq + Sized + Clone + Debug + ThreadBound,
         R: Runnble,
-        G: DirectedGraph<K, R, Node: Send + 'static> + Send + 'static,
+        G: DirectedGraph<K, R, Node: ThreadBound> + ThreadBound,
     > Send for AsyncGraphNode<K, R, G>
 {
 }
 
 impl<
-        K: Hash + Eq + Sized + Clone + Send + Debug + 'static,
+        K: Hash + Eq + Sized + Clone + Debug + ThreadBound,
         R: Runnble + 'static,
-        G: DirectedGraph<K, R, Node: Send + 'static> + Send + 'static,
+        G: DirectedGraph<K, R, Node: ThreadBound> + ThreadBound,
     > AsyncGraphNode<K, R, G>
 {
     /// 执行指定异步图节点到指定的运行时，并返回任务同步情况下的结束数量
@@ -216,12 +217,17 @@ pub trait RunFactory {
     fn create(&self) -> Self::R;
 }
 
+pub trait AsyncNode: Fn() -> BoxFuture<'static, Result<()>> + ThreadBound {
+	
+}
+impl<T: Fn() -> BoxFuture<'static, Result<()>> + ThreadBound> AsyncNode for T {}
+
 pub enum ExecNode<Run: Runner, Fac:RunFactory<R=Run>> {
 	None,
 	Sync(Fac),
-	Async(Box<dyn Fn() -> BoxFuture<'static, Result<()>> + 'static + Send + Sync>),
+	Async(Box<dyn AsyncNode>),
 }
-impl<Run: Runner + Send + 'static, Fac:RunFactory<R=Run>> Runnble for ExecNode<Run, Fac> {
+impl<Run: Runner + ThreadBound, Fac:RunFactory<R=Run>> Runnble for ExecNode<Run, Fac> {
     type R = Run;
     fn is_sync(&self) -> Option<bool> {
         match self {
@@ -248,7 +254,7 @@ impl<Run: Runner + Send + 'static, Fac:RunFactory<R=Run>> Runnble for ExecNode<R
 
 #[test]
 fn test_graph() {
-    use pi_async::rt::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
+    use pi_async::prelude::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
     use std::time::Duration;
     use futures::FutureExt;
     use pi_graph::NGraphBuilder;
@@ -304,8 +310,9 @@ fn test_graph() {
     .edge(9, 10)
     .edge(10, 11)
     .build().unwrap();
-    let ag = Arc::new(graph);
+    
     let _ = rt0.spawn(rt0.alloc(), async move {
+		let ag = Arc::new(graph);
         let _: _ = async_graph(rt1, ag).await;
         println!("ok");
     });
@@ -313,7 +320,7 @@ fn test_graph() {
 }
 #[test]
 fn test() {
-	use pi_async::rt::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
+	use pi_async::prelude::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
     use std::time::Duration;
 
     let pool = MultiTaskRuntimeBuilder::<(), StealableTaskPool<()>>::default();
