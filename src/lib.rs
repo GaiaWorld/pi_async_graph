@@ -12,11 +12,10 @@ use pi_futures::BoxFuture;
 use pi_async::prelude::AsyncRuntime;
 use std::io::{Error, ErrorKind, Result};
 use std::marker::PhantomData;
-use std::sync::Arc;
 use std::fmt::Debug;
 
 use pi_graph::{DirectedGraph, DirectedGraphNode};
-use pi_share::{ThreadSync, ThreadSend};
+use pi_share::{ThreadSync, ThreadSend, Share};
 
 
 /// 同步执行节点
@@ -41,7 +40,7 @@ pub async fn async_graph<
     R: Runnble + ThreadSync+ 'static,
     G: DirectedGraph<K, R, Node: ThreadSend + 'static> + ThreadSync+ 'static,
 	A: AsyncRuntime<()>,
->(rt: A, graph: Arc<G>) -> Result<()> {
+>(rt: A, graph: Share<G>) -> Result<()> {
     // 获得图的to节点的数量
     let mut count = graph.to_len();
 	if count == 0 {
@@ -107,7 +106,7 @@ pub struct AsyncGraphNode<
     R: Runnble,
     G: DirectedGraph<K, R, Node: ThreadSend + 'static> + ThreadSync+ 'static,
 > {
-    graph: Arc<G>,
+    graph: Share<G>,
     key: K,
     producor: Sender<Result<usize>>, //异步返回值生成器
     _k: PhantomData<R>,
@@ -117,7 +116,7 @@ impl<
     R: Runnble,
     G: DirectedGraph<K, R, Node: ThreadSend + 'static> + ThreadSync+ 'static,
 > AsyncGraphNode<K, R, G> {
-    pub fn new(graph: Arc<G>, key: K, producor: Sender<Result<usize>>) -> Self {
+    pub fn new(graph: Share<G>, key: K, producor: Sender<Result<usize>>) -> Self {
         AsyncGraphNode {
             graph,
             key,
@@ -312,7 +311,7 @@ fn test_graph() {
     .build().unwrap();
     
     let _ = rt0.spawn(rt0.alloc(), async move {
-		let ag = Arc::new(graph);
+		let ag = Share::new(graph);
         let _: _ = async_graph(rt1, ag).await;
         println!("ok");
     });
