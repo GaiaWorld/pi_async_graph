@@ -5,7 +5,7 @@ extern crate test;
 
 use core::hash::Hash;
 use flume::{bounded, Receiver, Sender};
-use pi_async::prelude::AsyncRuntime;
+use pi_async_rt::prelude::AsyncRuntime;
 use pi_futures::BoxFuture;
 use pi_graph::{DirectedGraph, DirectedGraphNode};
 use pi_share::{Share, ThreadSend, ThreadSync};
@@ -160,7 +160,7 @@ impl<
             Some(true) => {
                 // 同步节点
                 let r = node.value().get_sync();
-                rt.clone().spawn(rt.alloc(), async move {
+                rt.clone().spawn(async move {
                     // 执行同步任务
                     r.run(context);
 
@@ -169,7 +169,7 @@ impl<
             }
             _ => {
                 let f = node.value().get_async(context);
-                rt.clone().spawn(rt.alloc(), async move {
+                rt.clone().spawn(async move {
                     // 执行异步任务
                     if let Err(e) = f.await {
                         let _ = self.producor.into_send_async(Err(e)).await;
@@ -287,7 +287,7 @@ impl<
 #[test]
 fn test_graph() {
     use futures::FutureExt;
-    use pi_async::prelude::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
+    use pi_async_rt::prelude::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
     use pi_graph::NGraphBuilder;
     use std::time::Duration;
 
@@ -310,7 +310,7 @@ fn test_graph() {
         ExecNode::Sync(B(id))
     }
     fn asyn(id: usize) -> ExecNode<(), A, B> {
-        let f = move |empty| -> BoxFuture<'static, Result<()>> {
+        let f = move |_empty| -> BoxFuture<'static, Result<()>> {
             async move {
                 println!("async id:{}", id);
                 Ok(())
@@ -347,7 +347,7 @@ fn test_graph() {
         .build()
         .unwrap();
 
-    let _ = rt0.spawn(rt0.alloc(), async move {
+    let _ = rt0.spawn(async move {
         let ag = Share::new(graph);
         let _: _ = async_graph(rt1, ag, &()).await;
         println!("ok");
@@ -357,13 +357,13 @@ fn test_graph() {
 
 #[test]
 fn test() {
-    use pi_async::prelude::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
+    use pi_async_rt::prelude::multi_thread::{MultiTaskRuntimeBuilder, StealableTaskPool};
     use std::time::Duration;
 
     let pool = MultiTaskRuntimeBuilder::<(), StealableTaskPool<()>>::default();
     let rt0 = pool.build();
     let rt1 = rt0.clone();
-    let _ = rt0.spawn(rt0.alloc(), async move {
+    let _ = rt0.spawn(async move {
         let mut map_reduce = rt1.map_reduce(10);
         let rt2 = rt1.clone();
         let rt3 = rt1.clone();
