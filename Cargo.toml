@@ -1,6 +1,6 @@
 [package]
 name = "pi_async_graph"
-version = "0.7.0"
+version = "0.7.1"
 authors = ["zmythleo <zmythleo@gmail.com>"]
 edition = "2021"
 description = "async graph"
