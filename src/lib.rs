@@ -1,7 +1,7 @@
 //! 异步执行 静态有向无环图 的运行节点
-#![feature(associated_type_bounds)]
-#![feature(test)]
-extern crate test;
+// #![feature(associated_type_bounds)]
+// #![feature(test)]
+// extern crate test;
 
 use flume::{bounded, Receiver, Sender};
 use pi_async_rt::prelude::AsyncRuntime;
